@@ -226,7 +226,6 @@ function New-PSDCImage {
         if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
             if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
                 Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
-                Write-Host $computer.IsLocalhost
             }
             else
             {
