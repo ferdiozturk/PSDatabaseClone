@@ -1,4 +1,4 @@
-﻿function New-PSDCImage {
+function New-PSDCImage {
     <#
     .SYNOPSIS
         New-PSDCImage creates a new image
@@ -223,6 +223,17 @@
 
         # Setup the computer object
         $computer = [PsfComputer]$uriHost
+        if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
+            if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
+                Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
+                Write-Host $computer.IsLocalhost
+            }
+            else
+            {
+                Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
+                Write-Host $computer.IsLocalhost
+            }
+        }
 
         if (-not $computer.IsLocalhost) {
             # Get the result for the remote test
