@@ -185,7 +185,7 @@
                 $server = Connect-DbaInstance -SqlInstance $instance -SqlCredential $SqlCredential
 
                 # Setup the computer object
-                $computer = [PsfComputer]$server.Name
+                $computer = [PsfComputer]$server.ComputerName
             }
             catch {
                 Stop-PSFFunction -Message "Could not connect to Sql Server instance $instance" -ErrorRecord $_ -Target $instance
@@ -194,7 +194,7 @@
 
             if (-not $computer.IsLocalhost) {
                 # Get the result for the remote test
-                $resultPSRemote = Test-PSDCRemoting -ComputerName $server.Name -Credential $Credential
+                $resultPSRemote = Test-PSDCRemoting -ComputerName $server.ComputerName -Credential $Credential
 
                 # Check the result
                 if ($resultPSRemote.Result) {
