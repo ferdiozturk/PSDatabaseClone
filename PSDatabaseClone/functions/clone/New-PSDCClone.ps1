@@ -186,17 +186,17 @@
 
                 # Setup the computer object
                 $computer = [PsfComputer]$server.ComputerName
-                if (-not ($myObject.PSobject.Properties.name -match "IsLocalhost")) {
-					if ($($env:ComputerName).toLower() -eq $($server.ComputerName).toLower() ) {
-						Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
-						Write-Host $computer.IsLocalhost
-					}
-					else
-					{
-						Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
-						Write-Host $computer.IsLocalhost
-					}
-				}
+                if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
+                    if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
+                        Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
+                        Write-Host $computer.IsLocalhost
+                    }
+                    else
+                    {
+                        Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
+                        Write-Host $computer.IsLocalhost
+                    }
+                }
             }
             catch {
                 Stop-PSFFunction -Message "Could not connect to Sql Server instance $instance" -ErrorRecord $_ -Target $instance
