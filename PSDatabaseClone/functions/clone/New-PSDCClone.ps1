@@ -1,4 +1,4 @@
-﻿function New-PSDCClone {
+function New-PSDCClone {
     <#
     .SYNOPSIS
         New-PSDCClone creates a new clone
@@ -186,6 +186,17 @@
 
                 # Setup the computer object
                 $computer = [PsfComputer]$server.ComputerName
+                if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
+                    if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
+                        Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
+                        Write-PSFMessage -Message $computer.IsLocalhost -Level Verbvose
+                    }
+                    else
+                    {
+                        Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
+                        Write-PSFMessage -Message $computer.IsLocalhost -Level Verbvose
+                    }
+                }
             }
             catch {
                 Stop-PSFFunction -Message "Could not connect to Sql Server instance $instance" -ErrorRecord $_ -Target $instance
@@ -194,7 +205,7 @@
 
             if (-not $computer.IsLocalhost) {
                 # Get the result for the remote test
-                $resultPSRemote = Test-PSDCRemoting -ComputerName $server.Name -Credential $Credential
+                $resultPSRemote = Test-PSDCRemoting -ComputerName $server.ComputerName -Credential $Credential
 
                 # Check the result
                 if ($resultPSRemote.Result) {
@@ -405,7 +416,7 @@
                 }
 
                 # Mount the vhd
-                if ($PSCmdlet.ShouldProcess("$Destination\$CloneName.vhdx", "Mounting clone clone")) {
+                if ($PSCmdlet.ShouldProcess("$Destination\$CloneName.vhdx", "Mounting clone")) {
                     try {
                         Write-PSFMessage -Message "Mounting clone" -Level Verbose
 
@@ -475,7 +486,8 @@
                 try {
                     # Check if computer is local
                     if ($computer.IsLocalhost) {
-                        $accessRule = New-Object System.Security.AccessControl.FilesystemAccessrule("Everyone", "FullControl", "Allow")
+					    $everyoneSID = New-Object System.Security.Principal.SecurityIdentifier("S-1-1-0")
+                        $accessRule = New-Object System.Security.AccessControl.FilesystemAccessrule($everyoneSID, "FullControl", "Allow")
 
                         foreach ($file in $(Get-ChildItem $accessPath -Recurse)) {
                             $acl = Get-Acl $file.FullName
@@ -488,7 +500,8 @@
                         }
                     }
                     else {
-                        [string]$commandText = "`$accessRule = New-Object System.Security.AccessControl.FilesystemAccessrule(`"Everyone`", `"FullControl`", `"Allow`")
+                        [string]$commandText = "`$everyoneSID = New-Object System.Security.Principal.SecurityIdentifier(`"S-1-1-0`")
+						$accessRule = New-Object System.Security.AccessControl.FilesystemAccessrule($everyoneSID, `"FullControl`", `"Allow`")
                             foreach (`$file in `$(Get-ChildItem -Path `"$accessPath`" -Recurse)) {
                                 `$acl = Get-Acl `$file.Fullname
 
