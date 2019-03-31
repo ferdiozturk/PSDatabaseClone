@@ -159,8 +159,10 @@
 
         # Checking parameters
         if (-not $ImageNetworkPath) {
-            Stop-PSFFunction -Message "Please enter the network path where to save the images"
-            return
+            if (-not $ImageLocalPath) {
+                Stop-PSFFunction -Message "Please enter the network path where to save the images"
+                return
+            }
         }
 
         # Check the vhd type
@@ -207,112 +209,115 @@
         }
 
         # Cleanup the values in the network path
-        if ($ImageNetworkPath.EndsWith("\")) {
-            $ImageNetworkPath = $ImageNetworkPath.Substring(0, $ImageNetworkPath.Length - 1)
-        }
-
-        # Make up the data from the network path
-        try {
-            [uri]$uri = New-Object System.Uri($ImageNetworkPath)
-            $uriHost = $uri.Host
-        }
-        catch {
-            Stop-PSFFunction -Message "The image network path $ImageNetworkPath is not valid" -ErrorRecord $_ -Target $ImageNetworkPath
-            return
-        }
-
-        # Setup the computer object
-        $computer = [PsfComputer]$uriHost
-        if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
-            if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
-                Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
-                Write-Host $computer.IsLocalhost
+        if ($ImageNetworkPath) {
+            if ($ImageNetworkPath.EndsWith("\")) {
+                $ImageNetworkPath = $ImageNetworkPath.Substring(0, $ImageNetworkPath.Length - 1)
             }
-            else
+           
+            # Make up the data from the network path
+            try {
+                [uri]$uri = New-Object System.Uri($ImageNetworkPath)
+                $uriHost = $uri.Host
+            }
+            catch {
+                Stop-PSFFunction -Message "The image network path $ImageNetworkPath is not valid" -ErrorRecord $_ -Target $ImageNetworkPath
+                return
+            }
+            
+            # Setup the computer object
+            $computer = [PsfComputer]$uriHost
+            if (-not ($computer.PSobject.Properties.name -match "IsLocalhost")) {
+                if ($($env:ComputerName).toLower() -eq $($computer.ComputerName).toLower() ) {
+                    Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $true -NotePropertyName "IsLocalhost"
+                    Write-Host $computer.IsLocalhost
+                }
+                else
+                {
+                    Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
+                    Write-Host $computer.IsLocalhost
+                }
+            }
+
+            if (-not $computer.IsLocalhost) {
+                # Get the result for the remote test
+                $resultPSRemote = Test-PSDCRemoting -ComputerName $computer -Credential $Credential
+
+                # Check the result
+                if ($resultPSRemote.Result) {
+                    $command = [scriptblock]::Create("Import-Module PSDatabaseClone -Force")
+
+                    try {
+                        Invoke-PSFCommand -ComputerName $computer -ScriptBlock $command -Credential $Credential
+                    }
+                    catch {
+                        Stop-PSFFunction -Message "Couldn't import module remotely" -Target $command
+                        return
+                    }
+                }
+                else {
+                    Stop-PSFFunction -Message "Couldn't connect to host remotely.`nVerify that the specified computer name is valid, that the computer is accessible over the network, and that a firewall exception for the WinRM service is enabled and allows access from this computer" -Target $resultPSRemote -Continue
+                }
+            }
+            
+            # Get the local path from the network path
+            if (-not $ImageLocalPath) {
+                if ($PSCmdlet.ShouldProcess($ImageNetworkPath, "Converting UNC path to local path")) {
+                    try {
+                        # Check if computer is local
+                        if ($computer.IsLocalhost) {
+                            $ImageLocalPath = Convert-PSDCUncPathToLocalPath -UncPath $ImageNetworkPath -EnableException
+                        }
+                        else {
+                            $command = "Convert-PSDCUncPathToLocalPath -UncPath `"$ImageNetworkPath`" -EnableException"
+                            $commandGetLocalPath = [ScriptBlock]::Create($command)
+                            $ImageLocalPath = Invoke-PSFCommand -ComputerName $computer -ScriptBlock $commandGetLocalPath -Credential $DestinationCredential
+
+                            if (-not $ImageLocalPath) {
+                                return
+                            }
+                        }
+
+                        Write-PSFMessage -Message "Converted '$ImageNetworkPath' to '$ImageLocalPath'" -Level Verbose
+
+                    }
+                    catch {
+                        Stop-PSFFunction -Message "Something went wrong getting the local image path" -Target $ImageNetworkPath
+                        return
+                    }
+                }
+            }
+            else 
             {
-                Add-Member -InputObject $computer -TypeName IsLocalhost -NotePropertyValue $false -NotePropertyName "IsLocalhost"
-                Write-Host $computer.IsLocalhost
-            }
-        }
-
-        if (-not $computer.IsLocalhost) {
-            # Get the result for the remote test
-            $resultPSRemote = Test-PSDCRemoting -ComputerName $computer -Credential $Credential
-
-            # Check the result
-            if ($resultPSRemote.Result) {
-                $command = [scriptblock]::Create("Import-Module PSDatabaseClone -Force")
-
-                try {
-                    Invoke-PSFCommand -ComputerName $computer -ScriptBlock $command -Credential $Credential
+                # Cleanup the values in the network path
+                if ($ImageLocalPath.EndsWith("\")) {
+                    $ImageLocalPath = $ImageLocalPath.Substring(0, $ImageLocalPath.Length - 1)
                 }
-                catch {
-                    Stop-PSFFunction -Message "Couldn't import module remotely" -Target $command
-                    return
-                }
-            }
-            else {
-                Stop-PSFFunction -Message "Couldn't connect to host remotely.`nVerify that the specified computer name is valid, that the computer is accessible over the network, and that a firewall exception for the WinRM service is enabled and allows access from this computer" -Target $resultPSRemote -Continue
-            }
-        }
 
-        # Get the local path from the network path
-        if (-not $ImageLocalPath) {
-            if ($PSCmdlet.ShouldProcess($ImageNetworkPath, "Converting UNC path to local path")) {
+                # Check if the assigned value in the local path corresponds to the one retrieved
                 try {
                     # Check if computer is local
                     if ($computer.IsLocalhost) {
-                        $ImageLocalPath = Convert-PSDCUncPathToLocalPath -UncPath $ImageNetworkPath -EnableException
+                        $convertedLocalPath = Convert-PSDCUncPathToLocalPath -UncPath $ImageNetworkPath -EnableException
                     }
                     else {
                         $command = "Convert-PSDCUncPathToLocalPath -UncPath `"$ImageNetworkPath`" -EnableException"
                         $commandGetLocalPath = [ScriptBlock]::Create($command)
-                        $ImageLocalPath = Invoke-PSFCommand -ComputerName $computer -ScriptBlock $commandGetLocalPath -Credential $DestinationCredential
-
-                        if (-not $ImageLocalPath) {
-                            return
-                        }
+                        $convertedLocalPath = Invoke-PSFCommand -ComputerName $computer -ScriptBlock $commandGetLocalPath -Credential $DestinationCredential
                     }
 
                     Write-PSFMessage -Message "Converted '$ImageNetworkPath' to '$ImageLocalPath'" -Level Verbose
+
+                    # Check if the ImageLocalPath and convertedLocalPath are the same
+                    if ($ImageLocalPath -ne $convertedLocalPath) {
+                        Stop-PSFFunction -Message "The local path '$ImageLocalPath' is not the same location as the network path '$ImageNetworkPath'" -Target $ImageNetworkPath
+                        return
+                    }
 
                 }
                 catch {
                     Stop-PSFFunction -Message "Something went wrong getting the local image path" -Target $ImageNetworkPath
                     return
                 }
-            }
-        }
-        else {
-            # Cleanup the values in the network path
-            if ($ImageLocalPath.EndsWith("\")) {
-                $ImageLocalPath = $ImageLocalPath.Substring(0, $ImageLocalPath.Length - 1)
-            }
-
-            # Check if the assigned value in the local path corresponds to the one retrieved
-            try {
-                # Check if computer is local
-                if ($computer.IsLocalhost) {
-                    $convertedLocalPath = Convert-PSDCUncPathToLocalPath -UncPath $ImageNetworkPath -EnableException
-                }
-                else {
-                    $command = "Convert-PSDCUncPathToLocalPath -UncPath `"$ImageNetworkPath`" -EnableException"
-                    $commandGetLocalPath = [ScriptBlock]::Create($command)
-                    $convertedLocalPath = Invoke-PSFCommand -ComputerName $computer -ScriptBlock $commandGetLocalPath -Credential $DestinationCredential
-                }
-
-                Write-PSFMessage -Message "Converted '$ImageNetworkPath' to '$ImageLocalPath'" -Level Verbose
-
-                # Check if the ImageLocalPath and convertedLocalPath are the same
-                if ($ImageLocalPath -ne $convertedLocalPath) {
-                    Stop-PSFFunction -Message "The local path '$ImageLocalPath' is not the same location as the network path '$ImageNetworkPath'" -Target $ImageNetworkPath
-                    return
-                }
-
-            }
-            catch {
-                Stop-PSFFunction -Message "Something went wrong getting the local image path" -Target $ImageNetworkPath
-                return
             }
         }
 
